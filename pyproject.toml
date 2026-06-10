@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm[simple]>=8"]
+
+[project]
+name = "hallmark"
+dynamic = ["version"]
+license = "Apache-2.0"
+description = "Reproducibility is the hallmark of the scientific method"
+requires-python = ">=3.9"
+
+dependencies =[
+    "click",
+    "GitPython",
+    "numpy",
+    "pandas",
+    "parse",
+    "pyyaml",
+    "requests",
+    "tqdm",
+]
+
+authors = [
+    {name = "Chi-kwan Chan"},
+    {name = "Nayera Abdessalam"},
+    {name = "Hayden Marchinek"},
+    {name = "Rohin Sant"},
+    {name = "Ram Adithya"},
+    {name = "Hayden Foote"},
+]
+
+[project.scripts]
+hallmark = "hallmark.cli:hallmark"
+
+[project.urls]
+Homepage = "https://l6a.github.io/hallmark"
+Repository = "https://github.com/l6a/hallmark"
+Issues = "https://github.com/l6a/hallmark/issues"
+
+[dependency-groups]
+dev = ["pytest"]
+doc = ["sphinx"]
+lint = ["ruff"]
+
+[tool.setuptools.packages.find]
+where = ["mod"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+exclude = ["doc", "demo"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]

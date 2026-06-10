@@ -1,0 +1,43 @@
+# Workflow to publish the documentation website on github pages for tagged releases
+
+name: Documentation
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+
+permissions: 
+  id-token: write
+  pages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          
+      - name: Install sphinx
+        run: |
+          pip install sphinx
+
+      - name: Build docs
+        run: |
+          sphinx-build doc doc/_build
+
+      - name: Upload artifacts
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "doc/_build"
+
+      - name: Deploy to GitHub pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        
+
+          
+          
