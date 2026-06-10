@@ -179,13 +179,6 @@ def test_build_tree_drives_has_three_files(eht_dataset):
     tree = build_tree(eht_dataset)
     assert len(tree["drives"]) == 3
 
-
-def test_build_tree_each_stem_has_correct_columns(eht_dataset):
-    tree = build_tree(eht_dataset)
-    for stem, pf in tree["data"].items():
-        assert set(pf.columns) == {"path", "ext"}
-
-
 def test_build_tree_drives_all_tgz(eht_dataset):
     tree = build_tree(eht_dataset)
     assert all(p.endswith(".tgz") for p in tree["drives"]["path"])

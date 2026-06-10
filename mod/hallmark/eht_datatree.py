@@ -20,7 +20,7 @@ def read_inventory(root: Path) -> list[str]:
         raise FileNotFoundError(f"INVENTORY.txt not found in {root}")
 
     files_list = []
-    # only reads lines without trailing "/" (directories) and strips trailing "*" (executable marker)
+    # skip directory lines ending in "/" and strip executable marker "*"
     for line in inventory_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.endswith("/"):
@@ -86,7 +86,7 @@ def build_tree(root: Path) -> dict:
 
     # data
     all_data_pf = ParaFrame.parse(FMT_DATA, base_path=root)
-    # finds each different unique fmt string based on the parameters, and builds a branch for each
+    # find unique stem combinations to build one branch per observation
     # currently hardcoded with this dataset, will need to be generalized
     stems = all_data_pf[["year", "day", "band"]].drop_duplicates()
     data = {}
