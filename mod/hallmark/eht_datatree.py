@@ -2,19 +2,19 @@ from __future__ import annotations
 from pathlib import Path
 from hallmark import ParaFrame
 
-"""
-Read INVENTORY.txt and return expected relative file paths.
-
-    Args:
-        root: Path to the dataset root directory containing INVENTORY.txt.
-
-    Returns:
-        List of relative file path strings expected to exist under root.
-
-    Raises:
-        FileNotFoundError: If INVENTORY.txt does not exist under root.
-"""
 def read_inventory(root: Path) -> list[str]:
+    """
+    Read INVENTORY.txt and return expected relative file paths.
+
+        Args:
+            root: Path to the dataset root directory containing INVENTORY.txt.
+
+        Returns:
+            List of relative file path strings expected to exist under root.
+
+        Raises:
+            FileNotFoundError: If INVENTORY.txt does not exist under root.
+    """
     inventory_path = Path(root) / "INVENTORY.txt"
     if not inventory_path.exists():
         raise FileNotFoundError(f"INVENTORY.txt not found in {root}")
@@ -29,17 +29,17 @@ def read_inventory(root: Path) -> list[str]:
         files_list.append(line)
     return files_list
 
-"""
-Cross-check INVENTORY.txt against a set of tracked files in tree.
-
-    Args:
-        root:    Path to the dataset root containing INVENTORY.txt.
-        tracked: Set of relative file path strings already in the tree.
-
-    Returns:
-        True if all inventory files are accounted for, False otherwise.
-"""
 def validate(root: Path, tracked: set[str]) -> bool:
+    """
+    Cross-check INVENTORY.txt against a set of tracked files in tree.
+
+        Args:
+            root:    Path to the dataset root containing INVENTORY.txt.
+            tracked: Set of relative file path strings already in the tree.
+
+        Returns:
+            True if all inventory files are accounted for, False otherwise.
+    """
     files_list = read_inventory(root)
     missing = []
     # Check that every file in the inventory is present in the tracked set
@@ -54,24 +54,23 @@ def validate(root: Path, tracked: set[str]) -> bool:
     else:
         print("  ✓ all inventory files are present in the tree")
         return True
-
-"""
-Build an in-memory pytree for an EHT dataset directory.
-
-Args:
-    root: Path to the EHT dataset root directory.
-
-Returns:
-    A dictionary with keys:
-        - "meta"   : ParaFrame of housekeeping files
-        - "drives" : ParaFrame of compressed archives
-        - "data"   : dict of {stem -> ParaFrame}
-"""
+    
 # hardcoded formats for this dataset, based on inventory and globbing
 FMT_DRIVES = "{name}.tgz"
 FMT_DATA   = "{ext}/SR1_M87_{year}_{day}_{band}_hops_netcal_StokesI.{ext}"
 def build_tree(root: Path) -> dict:
+    """
+    Build an in-memory pytree for an EHT dataset directory.
 
+        Args:
+            root: Path to the EHT dataset root directory.
+
+    Returns:
+        A dictionary with keys:
+            - "meta"   : ParaFrame of housekeeping files
+            - "drives" : ParaFrame of compressed archives
+            - "data"   : dict of {stem -> ParaFrame}
+    """
     root = Path(root).expanduser().resolve()
     # track files that are included in the tree, to cross-check against inventory
     tracked = set()

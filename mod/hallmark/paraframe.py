@@ -21,7 +21,7 @@ import parse
 import pandas as pd
 import numpy as np
 
-from .helper_functions import find_spec_by_fmt, regex_sub
+from .helper_functions import find_spec_by_fmt, regex_sub, try_numeric_conversion
 
 
 class ParaFrame(pd.DataFrame):
@@ -276,7 +276,5 @@ class ParaFrame(pd.DataFrame):
         # if conversion fails the column stays as string
         result = cls(frame, encodings=encodings, base_path=base_path)
         for col in result.columns:
-            converted = pd.to_numeric(result[col], errors="coerce")
-            if not converted.isna().any():
-                result[col] = converted
+            result[col] = try_numeric_conversion(result[col])
         return result

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import re
+import pandas as pd
 
 
 def find_spec_by_fmt(fmt, encodings):
@@ -59,3 +60,29 @@ def regex_sub(value, yaml_encodings):
         result = re.sub(match.group(0), "-" + str(match.group(1)), result)
 
     return result
+
+def try_numeric_conversion(series):
+    """
+    Attempt to convert a pandas Series to numeric.
+
+    Converts the series to numeric iff:
+      1. All values are numeric
+      2. Converting back to string matches the original values to avoid
+         unintended conversions (e.g., "001" -> 1)
+
+    Args:
+        series: A pandas Series of strings to attempt conversion on.
+
+    Returns:
+        The converted numeric Series if both conditions are met,
+        otherwise returns original series.
+    """
+    converted = pd.to_numeric(series, errors="coerce")
+    if converted.isna().any():
+        return series
+    if not all(str(int(numeric_val)) == str(original_val) 
+                 or str(numeric_val) == str(original_val)
+               for numeric_val, original_val in zip(converted, series)):
+        return series
+    return converted
+
