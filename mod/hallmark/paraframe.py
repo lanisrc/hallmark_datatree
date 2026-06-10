@@ -272,4 +272,11 @@ class ParaFrame(pd.DataFrame):
                 print(f'Failed to parse "{f}"')
             else:
                 frame.append({"path": f_short, **r.named})
-        return cls(frame, encodings=encodings, base_path=base_path)
+        # attempt to convert each parameter column to numeric
+        # if conversion fails the column stays as string
+        result = cls(frame, encodings=encodings, base_path=base_path)
+        for col in result.columns:
+            converted = pd.to_numeric(result[col], errors="coerce")
+            if not converted.isna().any():
+                result[col] = converted
+        return result
