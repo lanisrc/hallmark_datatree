@@ -123,11 +123,11 @@ def test_encoded_pf_paths_are_in_encoded_subdirectory(hallmark_test_suite_dictio
     pf = hallmark_test_suite_dictionary["encoded_pf"]
     assert all(path.startswith("encoded/") for path in pf["path"])
 
-def test_standard_pf_paths_are_not_in_encoded_subdirectory(hallmark_test_suite_dictionary):
+def test_standard_pf_not_in_encoded_subdir(hallmark_test_suite_dictionary):
     pf = hallmark_test_suite_dictionary["standard_pf"]
     assert not any(path.startswith("encoded/") for path in pf["path"])
 
-def test_standard_and_encoded_pf_have_no_overlapping_paths(hallmark_test_suite_dictionary):
+def test_standard_and_encoded_no_overlap(hallmark_test_suite_dictionary):
     standard_paths = set(hallmark_test_suite_dictionary["standard_pf"]["path"])
     encoded_paths = set(hallmark_test_suite_dictionary["encoded_pf"]["path"])
     assert standard_paths.isdisjoint(encoded_paths)

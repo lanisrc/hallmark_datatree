@@ -57,7 +57,9 @@ def eht_dataset(tmp_path):
     _write_inventory(tmp_path, INVENTORY_CONTENT)
 
     # write script files
-    for file_name in ["csv/dump_csv.py", "txt/dump_txt.py", "uvfits/convert_stokesI.py"]:
+    for file_name in ["csv/dump_csv.py", 
+                      "txt/dump_txt.py", 
+                      "uvfits/convert_stokesI.py"]:
         (tmp_path / file_name).write_text(file_name, encoding="utf-8")
 
     # write drive files
@@ -224,8 +226,9 @@ def test_build_tree_each_stem_has_correct_columns(sample_tree):
 
 def test_build_tree_each_stem_has_all_three_formats(sample_tree):
     for stem, pf in sample_tree["data"].items():
-        assert set(pf["ext"].unique()) == {"csv", "txt", "uvfits"}, \
-                                      f"{stem} has wrong formats: {set(pf['ext'].unique())}"
+        assert set(pf["ext"].unique()) == {"csv", "txt", "uvfits"}, (
+            f"{stem} has wrong formats: {set(pf['ext'].unique())}"
+            )
 
 
 def test_build_tree_no_file_in_multiple_branches(sample_tree):
