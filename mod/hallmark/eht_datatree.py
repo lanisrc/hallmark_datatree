@@ -15,6 +15,7 @@ def read_inventory(root: Path) -> list[str]:
         Raises:
             FileNotFoundError: If INVENTORY.txt does not exist under root.
     """
+    # finds path to the inventory file, raises error if not found
     inventory_path = Path(root) / "INVENTORY.txt"
     if not inventory_path.exists():
         raise FileNotFoundError(f"INVENTORY.txt not found in {root}")
@@ -22,10 +23,14 @@ def read_inventory(root: Path) -> list[str]:
     files_list = []
     # skip directory lines ending in "/" and strip executable marker "*"
     for line in inventory_path.read_text(encoding="utf-8").splitlines():
+        # remove whitespace
         line = line.strip()
+        # skip empty lines and directories
         if not line or line.endswith("/"):
             continue
+        # remove executable marker if present
         line = line.rstrip("*")
+        # add cleaned line to files list
         files_list.append(line)
     return files_list
 
@@ -43,13 +48,16 @@ def validate(root: Path, tracked: set[str]) -> bool:
     files_list = read_inventory(root)
     missing = []
     # Check that every file in the inventory is present in the tracked set
-    for f in files_list:
-        if f not in tracked:
-            missing.append(f)
+    for file in files_list:
+        if file not in tracked:
+            # add file not in tracked to missing list
+            missing.append(file)
+    # if the missing list is not empty, print missing files message
     if missing:
+        # print how many files are missing and list them
         print(f"  missing  : {len(missing)} file(s)")
-        for f in missing:
-            print(f"    ✗  {f}")
+        for file in missing:
+            print(f"    ✗  {file}")
         return False
     else:
         print("  ✓ all inventory files are present in the tree")
@@ -71,11 +79,13 @@ def build_tree(root: Path) -> dict:
             - "drives" : ParaFrame of compressed archives
             - "data"   : dict of {stem -> ParaFrame}
     """
+    # create clean root path
     root = Path(root).expanduser().resolve()
     # track files that are included in the tree, to cross-check against inventory
     tracked = set()
 
-    # drives
+    ### DRIVES ###
+    # create ParaFrame for drive files based on FMT_DRIVES
     drives_pf = ParaFrame.parse(FMT_DRIVES, base_path=root)
     # drop name column as it is redundant with path
     drives_pf = drives_pf.drop(columns=["name"])
@@ -83,50 +93,61 @@ def build_tree(root: Path) -> dict:
     for path in drives_pf["path"]:
         tracked.add(path)
 
-    # data
+    ### DATA ###
+    # create ParaFrame for all data files based on FMT_DATA
     all_data_pf = ParaFrame.parse(FMT_DATA, base_path=root)
     # find unique stem combinations to build one branch per observation
     # currently hardcoded with this dataset, will need to be generalized
     stems = all_data_pf[["year", "day", "band"]].drop_duplicates()
     data = {}
+    # create a branch for each unique stem combination and add to tree
     for _, row in stems.iterrows():
         year, day, band = row["year"], row["day"], row["band"]
+        # harcoded branch name format that will need to be generalized
         branch_name = f"SR1_M87_{year}_{day}_{band}_hops_netcal_StokesI"
+        # filter all_data_pf to only rows matching this stem combination
         mask = (
             (all_data_pf["year"] == year) &
             (all_data_pf["day"] == day) &
             (all_data_pf["band"] == band)
         )
+        # apply the mask to get only the 3 files for this stem combination
         stem_pf = all_data_pf[mask]
+        # store the stem ParaFrame in the data dict under the stem name
         data[branch_name] = stem_pf
+        # adds all files in this stem to tracked set
         for path in stem_pf["path"]:
             tracked.add(path)
 
-    # meta
-    all_files = {
-        str(f.relative_to(root))
-        for f in root.rglob("*")
-        if f.is_file() and f not in tracked
+    ### META ###
+    # create a list of all files under root that aren't tracked
+    meta_files = {
+        str(file.relative_to(root))
+        for file in root.rglob("*")
+        # add file if its not a dir, not the .hm, and not in tracked
+        if file.is_file() 
+           and ".hm" not in file.parts
+           and str(file.relative_to(root)) not in tracked
     }
-    meta_files = all_files - tracked
-    # adds all files that weren't in the other branches
+    # create a paraframe for the meta files
     meta_pf = ParaFrame(
-        [{"path": f} for f in sorted(meta_files)],
+        [{"path": file} for file in sorted(meta_files)],
         base_path=root,
     )
 
-    # cross-check against inventory that no files are missing from the tree
+    # add all 3 branches to a tracked set to cross-check against inventory
     all_tracked = set()
     for _, row in meta_pf.iterrows():
         all_tracked.add(row["path"])
     for _, row in drives_pf.iterrows():
         all_tracked.add(row["path"])
+    # iterate over every ParaFrame stem in data
     for pf in data.values():
         for _, row in pf.iterrows():
             all_tracked.add(row["path"])
     validate(root, all_tracked)
         
-
+    # return dict with three keys, only data has subbranches
     return {
         "meta"   : meta_pf,
         "drives" : drives_pf,

@@ -26,6 +26,7 @@ def test_standard_pf_column_names(hallmark_test_suite_dictionary):
 def test_standard_pf_column_value_types(hallmark_test_suite_dictionary):
     pf = hallmark_test_suite_dictionary["standard_pf"]
     assert pd.api.types.is_float_dtype(pf["a"])
+    # i values are whole numbers so they convert to int64, not float64
     assert pd.api.types.is_numeric_dtype(pf["i"])
 
 def test_standard_pf_values(hallmark_test_suite_dictionary):
@@ -116,6 +117,20 @@ def test_encoded_glob_pattern_created_properly(hallmark_test_suite_dictionary):
 def test_encoded_glob_returns_expected_files(hallmark_test_suite_dictionary):
     files = hallmark_test_suite_dictionary["encoded_globbed_files"]
     assert len(files) == 4
+
+# new tests for the two different subdirectories of encoded vs standard files
+def test_encoded_pf_paths_are_in_encoded_subdirectory(hallmark_test_suite_dictionary):
+    pf = hallmark_test_suite_dictionary["encoded_pf"]
+    assert all(path.startswith("encoded/") for path in pf["path"])
+
+def test_standard_pf_paths_are_not_in_encoded_subdirectory(hallmark_test_suite_dictionary):
+    pf = hallmark_test_suite_dictionary["standard_pf"]
+    assert not any(path.startswith("encoded/") for path in pf["path"])
+
+def test_standard_and_encoded_pf_have_no_overlapping_paths(hallmark_test_suite_dictionary):
+    standard_paths = set(hallmark_test_suite_dictionary["standard_pf"]["path"])
+    encoded_paths = set(hallmark_test_suite_dictionary["encoded_pf"]["path"])
+    assert standard_paths.isdisjoint(encoded_paths)
 
 ### Test repo behavior
 def test_repo_init_created_dot_hm(hallmark_test_suite_dictionary):
