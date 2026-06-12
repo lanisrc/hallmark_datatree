@@ -134,18 +134,11 @@ def build_tree(root: Path) -> dict:
         [{"path": file} for file in sorted(meta_files)],
         base_path=root,
     )
-
-    # add all 3 branches to a tracked set to cross-check against inventory
-    all_tracked = set()
     for _, row in meta_pf.iterrows():
-        all_tracked.add(row["path"])
-    for _, row in drives_pf.iterrows():
-        all_tracked.add(row["path"])
-    # iterate over every ParaFrame stem in data
-    for pf in data.values():
-        for _, row in pf.iterrows():
-            all_tracked.add(row["path"])
-    validate(root, all_tracked)
+        tracked.add(row["path"])
+        
+    # check all files are in the tree
+    validate(root, tracked)
         
     # return dict with three keys, only data has subbranches
     return {
