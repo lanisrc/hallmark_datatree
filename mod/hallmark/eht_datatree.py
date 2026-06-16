@@ -1,19 +1,20 @@
 from __future__ import annotations
 from pathlib import Path
 from hallmark import ParaFrame
+import parse
 
 def read_inventory(root: Path) -> list[str]:
     """
     Read INVENTORY.txt and return expected relative file paths.
 
-        Args:
-            root: Path to the dataset root directory containing INVENTORY.txt.
+    Args:
+        root: Path to the dataset root directory containing INVENTORY.txt.
 
-        Returns:
-            List of relative file path strings expected to exist under root.
+    Returns:
+        List of relative file path strings expected to exist under root.
 
-        Raises:
-            FileNotFoundError: If INVENTORY.txt does not exist under root.
+    Raises:
+        FileNotFoundError: If INVENTORY.txt does not exist under root.
     """
     # finds path to the inventory file, raises error if not found
     inventory_path = Path(root) / "INVENTORY.txt"
@@ -38,20 +39,16 @@ def validate(root: Path, tracked: set[str]) -> bool:
     """
     Cross-check INVENTORY.txt against a set of tracked files in tree.
 
-        Args:
-            root:    Path to the dataset root containing INVENTORY.txt.
-            tracked: Set of relative file path strings already in the tree.
+    Args:
+        root:    Path to the dataset root containing INVENTORY.txt.
+        tracked: Set of relative file path strings already in the tree.
 
-        Returns:
-            True if all inventory files are accounted for, False otherwise.
+    Returns:
+        True if all inventory files are accounted for, False otherwise.
     """
     files_list = read_inventory(root)
-    missing = []
-    # Check that every file in the inventory is present in the tracked set
-    for file in files_list:
-        if file not in tracked:
-            # add file not in tracked to missing list
-            missing.append(file)
+    # add files to missing if not in tracked but in inventory
+    missing = [file for file in files_list if file not in tracked]
     # if the missing list is not empty, print missing files message
     if missing:
         # print how many files are missing and list them
@@ -63,21 +60,22 @@ def validate(root: Path, tracked: set[str]) -> bool:
         print("  ✓ all inventory files are present in the tree")
         return True
     
-# hardcoded formats for this dataset, based on inventory and globbing
-FMT_DRIVES = "{name}.tgz"
-FMT_DATA   = "{ext}/SR1_M87_{year}_{day}_{band}_hops_netcal_StokesI.{ext}"
-def build_tree(root: Path) -> dict:
+# common drive extensions to look for when building the tree
+DRIVE_EXTENSIONS = [".tgz", ".tar", ".gz", ".zip", ".bz2", ".xz", ".zst", ".7z", ".rar"]
+
+def build_tree(root: Path, fmt: str) -> dict:
     """
     Build an in-memory pytree for an EHT dataset directory.
 
-        Args:
-            root: Path to the EHT dataset root directory.
+    Args:
+        root: Path to the EHT dataset root directory.
+        fmt: Format string for parsing data files.
 
     Returns:
         A dictionary with keys:
-            - "meta"   : ParaFrame of housekeeping files
-            - "drives" : ParaFrame of compressed archives
-            - "data"   : dict of {stem -> ParaFrame}
+        - "meta"   : ParaFrame of housekeeping files
+        - "drives" : ParaFrame of compressed archives
+        - "data"   : dict of {stem -> ParaFrame}
     """
     # create clean root path
     root = Path(root).expanduser().resolve()
@@ -85,39 +83,46 @@ def build_tree(root: Path) -> dict:
     tracked = set()
 
     ### DRIVES ###
-    # create ParaFrame for drive files based on FMT_DRIVES
-    drives_pf = ParaFrame.parse(FMT_DRIVES, base_path=root)
-    # drop name column as it is redundant with path
-    drives_pf = drives_pf.drop(columns=["name"])
-    # adds all files with drive extension to tracked set
-    for path in drives_pf["path"]:
-        tracked.add(path)
+    # collect all drive paths matching any supported extension
+    drive_paths = []
+    for ext in DRIVE_EXTENSIONS:
+        # add any file that has this ext to the drive paths list and tracked set
+        for path in root.rglob(f"*{ext}"):
+            drive_paths.append(str(path.relative_to(root)))
+            tracked.add(str(path.relative_to(root)))
+    # build a single ParaFrame from all drive paths
+    drives_pf = ParaFrame(
+        [{"path": path} for path in sorted(drive_paths)],
+        base_path=root,
+    )
 
     ### DATA ###
-    # create ParaFrame for all data files based on FMT_DATA
-    all_data_pf = ParaFrame.parse(FMT_DATA, base_path=root)
-    # find unique stem combinations to build one branch per observation
-    # currently hardcoded with this dataset, will need to be generalized
-    stems = all_data_pf[["year", "day", "band"]].drop_duplicates()
-    data = {}
-    # create a branch for each unique stem combination and add to tree
-    for _, row in stems.iterrows():
-        year, day, band = row["year"], row["day"], row["band"]
-        # harcoded branch name format that will need to be generalized
-        branch_name = f"SR1_M87_{year}_{day}_{band}_hops_netcal_StokesI"
-        # filter all_data_pf to only rows matching this stem combination
-        mask = (
-            (all_data_pf["year"] == year) &
-            (all_data_pf["day"] == day) &
-            (all_data_pf["band"] == band)
-        )
-        # apply the mask to get only the 3 files for this stem combination
-        stem_pf = all_data_pf[mask]
-        # store the stem ParaFrame in the data dict under the stem name
-        data[branch_name] = stem_pf
-        # adds all files in this stem to tracked set
-        for path in stem_pf["path"]:
-            tracked.add(path)
+    # find all files that are named using the provided format string
+    globbed_files, _ = ParaFrame.glob_search(fmt, base_path=root, return_pattern=True)
+    # turn the fmt into a parser to extract fields from file paths
+    parser = parse.compile(fmt)
+    stems = {}
+    for file in globbed_files:
+        # get path to file from data root
+        relative_path = str(Path(file).relative_to(root))
+        # parse the path to extract fields, skip if it doesn't match the format
+        parsed = parser.parse(relative_path)
+        if parsed:
+            # create unique stem name based on fmt parameters excluding extension
+            stem_key = "_".join(str(value) for key, value in parsed.named.items() 
+                                if key != "ext")
+            # create stem if it doesn't already exist and add a row for this file
+            stems.setdefault(stem_key, []).append(
+                {"path": relative_path,
+                 "ext": Path(relative_path).suffix,
+                 **parsed.named}
+            )
+            tracked.add(relative_path)
+
+    data_branches = {}
+    # create a ParaFrame for each stem and add to the data branches dict
+    for stem_key, rows in stems.items():
+        data_branches[stem_key] = ParaFrame(rows, base_path=root)
 
     ### META ###
     # create a list of all files under root that aren't tracked
@@ -136,7 +141,7 @@ def build_tree(root: Path) -> dict:
     )
     for _, row in meta_pf.iterrows():
         tracked.add(row["path"])
-        
+
     # check all files are in the tree
     validate(root, tracked)
         
@@ -144,5 +149,5 @@ def build_tree(root: Path) -> dict:
     return {
         "meta"   : meta_pf,
         "drives" : drives_pf,
-        "data"   : data,
+        "data"   : data_branches,
     }
