@@ -192,17 +192,17 @@ def test_build_tree_has_correct_keys(sample_tree):
 
 def test_build_tree_meta_is_paraframe(sample_tree):
     assert isinstance(sample_tree["meta"], ParaFrame), \
-    f"meta is {type(sample_tree["meta"])} instead of ParaFrame"
+    f"meta is {type(sample_tree['meta'])} instead of ParaFrame"
 
 
 def test_build_tree_drives_is_paraframe(sample_tree):
     assert isinstance(sample_tree["drives"], ParaFrame), \
-    f"drives is {type(sample_tree["drives"])} instead of ParaFrame"
+    f"drives is {type(sample_tree['drives'])} instead of ParaFrame"
 
 
 def test_build_tree_data_is_dict(sample_tree):
     assert isinstance(sample_tree["data"], dict), \
-    f"data is {type(sample_tree["data"])} instead of dict"
+    f"data is {type(sample_tree['data'])} instead of dict"
 
 def test_build_tree_path_column_always_present(sample_tree):
     assert "path" in sample_tree["meta"].columns, \
@@ -235,7 +235,7 @@ def test_build_tree_meta_has_only_meta_files(sample_tree):
 
 def test_build_tree_meta_has_only_path_column(sample_tree):
     assert list(sample_tree["meta"].columns) == ["path"], \
-        f"meta has unexpected columns: {list(sample_tree["meta"].columns)}"
+        f"meta has unexpected columns: {list(sample_tree['meta'].columns)}"
 
 ### build_tree drive branch tests ###
 def test_build_tree_drives_only_contains_archive_files(sample_tree):
@@ -261,7 +261,7 @@ def test_build_tree_drives_finds_multiple_extensions(tmp_path):
     assert len(tree["drives"]) == 2
     # create list of all unique extensions in drives branch
     extensions = {Path(path).suffix for path in tree["drives"]["path"]}
-    assert extensions == {".tgz", ".zip"}, f""
+    assert extensions == {".tgz", ".zip"}
 
 
 def test_build_tree_drives_empty_when_no_archives(tmp_path):
@@ -269,7 +269,7 @@ def test_build_tree_drives_empty_when_no_archives(tmp_path):
     _write_inventory(tmp_path, "README.md\n")
     tree = build_tree(tmp_path, "{name}")
     assert len(tree["drives"]) == 0, \
-        f"length should be zero but len={len(tree["drives"])}"
+        f"length should be zero but len={len(tree['drives'])}"
 
 
 def test_build_tree_drives_found_in_subdirectories(tmp_path):
