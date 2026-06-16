@@ -3,6 +3,7 @@ import pytest
 from hallmark import ParaFrame
 from hallmark.eht_datatree import read_inventory, validate, build_tree
 
+# sample inventory content for testing based off real EHT inventory
 INVENTORY_CONTENT = """\
 README.md
 INVENTORY.txt
@@ -25,8 +26,14 @@ EHTC_FirstM87Results_Apr2019_txt.tgz
 EHTC_FirstM87Results_Apr2019_csv.tgz
 """
 
+# list of expected files from the raw inventory content
+EXPECTED_FILES = [
+    line.strip().rstrip("*")
+    for line in INVENTORY_CONTENT.splitlines()
+    if line.strip() and not line.strip().endswith("/")]
+
 # sample format string based on a real EHT dataset
-sample_fmt = "{ext}/SR1_M87_{year}_{day}_{band}_hops_netcal_StokesI.{ext}"
+sample_fmt = "SR1_M87_{year}_{day}_{band}_hops_netcal_StokesI.{ext}"
 
 # helper function to create test inventory file
 def _write_inventory(root: Path, content: str) -> None:
@@ -90,49 +97,18 @@ def sample_tree(eht_dataset):
 
 ### read_inventory tests ###
 
-def test_read_inventory_returns_list(inventory_result):
+def test_read_inventory_parsing_properties(inventory_result):
     assert isinstance(inventory_result, list), \
-    f"Expected list, got {type(inventory_result)}"
+        f"Expected list for inventory result, got {type(inventory_result)}"
+    dirs = [entry for entry in inventory_result if entry.endswith("/")]
+    assert not dirs, f"Directories not skipped: {dirs}"
+    execs = [entry for entry in inventory_result if entry.endswith("*")]
+    assert not execs, f"Exec markers not stripped: {execs}"
 
-
-def test_read_inventory_skips_directory_lines(inventory_result):
-    assert not any(entry.endswith("/") for entry in inventory_result), \
-    "Expected no directory entries, but found some ending with '/'"
-
-
-def test_read_inventory_strips_executable_marker(inventory_result):
-    assert not any(entry.endswith("*") for entry in inventory_result), \
-    "Expected no executable markers, but found some ending with '*'"
-
-def test_read_inventory_includes_top_level_files(inventory_result):
-    assert "README.md" in inventory_result, "No README.md found in inventory result"
-    assert "LICENSE.txt" in inventory_result, "No LICENSE.txt found in inventory result"
-    assert "INVENTORY.txt" in inventory_result, \
-           "No INVENTORY.txt found in inventory result"
-    assert "run.sh" in inventory_result, "No run.sh found in inventory result"
-
-
-def test_read_inventory_includes_scripts(inventory_result):
-    assert "uvfits/convert_stokesI.py" in inventory_result, \
-           "uvfits/convert_stokesI.py not found in inventory result"
-    assert "txt/dump_txt.py" in inventory_result, \
-           "txt/dump_txt.py not found in inventory result"
-    assert "csv/dump_csv.py" in inventory_result, \
-           "csv/dump_csv.py not found in inventory result"
-
-
-def test_read_inventory_includes_data_files(inventory_result):
-    assert "uvfits/SR1_M87_2017_095_hi_hops_netcal_StokesI.uvfits" in inventory_result,\
-"uvfits/SR1_M87_2017_095_hi_hops_netcal_StokesI.uvfits not found in inventory result"
-    assert "txt/SR1_M87_2017_095_hi_hops_netcal_StokesI.txt" in inventory_result, \
-        "txt/SR1_M87_2017_095_hi_hops_netcal_StokesI.txt not found in inventory result"
-    assert "csv/SR1_M87_2017_095_hi_hops_netcal_StokesI.csv" in inventory_result, \
-        "csv/SR1_M87_2017_095_hi_hops_netcal_StokesI.csv not found in inventory result"
-
-
-def test_read_inventory_includes_drives(inventory_result):
-    assert "EHTC_FirstM87Results_Apr2019_uvfits.tgz" in inventory_result, \
-           "EHTC_FirstM87Results_Apr2019_uvfits.tgz not found in inventory result"
+# test that all files are parsed from the inventory
+@pytest.mark.parametrize("expected_file", EXPECTED_FILES)
+def test_read_inventory_contents(inventory_result, expected_file):
+    assert expected_file in inventory_result, f"{expected_file} not found in inventory"
 
 # needs its own fixture to test blank lines handling
 def test_read_inventory_skips_blank_lines(tmp_path):
@@ -140,6 +116,13 @@ def test_read_inventory_skips_blank_lines(tmp_path):
     result = read_inventory(tmp_path)
     assert result == ["README.md", "LICENSE.txt"], \
         f"Expected only README.md and LICENSE.txt, got {result}"
+
+# needs its own fixture to test for directories without extensions
+def test_read_inventory_skips_no_extension(tmp_path):
+    _write_inventory(tmp_path, "run\nrun.sh\n")
+    result = read_inventory(tmp_path)
+    assert "run" not in result, "run not skipped"
+    assert "run.sh" in result, "run.sh not found"
 
 # needs its own fixture to test for missing inventory file
 def test_read_inventory_raises_if_missing(tmp_path):
@@ -150,7 +133,7 @@ def test_read_inventory_raises_if_missing(tmp_path):
 #### validate tests ####
 
 def test_validate_returns_true_when_all_present(inventory_dir, inventory_result):
-    # convert inventory_result to a set to work with validate's expected input
+    # convert inventory_result to a set to work with validate's expected set input
     tracked = set(inventory_result)
     assert validate(inventory_dir, tracked) is True,\
           "validate did not return True when all inventory files were tracked"
@@ -161,6 +144,14 @@ def test_validate_returns_false_when_files_missing(inventory_dir):
         "validate did not return False when files were missing"
 
 
+def test_validate_reports_success(inventory_dir, inventory_result, capsys):
+    tracked = set(inventory_result)
+    validate(inventory_dir, tracked)
+    output = capsys.readouterr().out
+    assert "✓ all inventory files are present" in output,\
+          "success message not in output"
+
+
 def test_validate_reports_only_missing_files(inventory_dir, capsys):
     tracked = {"README.md", "INVENTORY.txt", "LICENSE.txt"}
     validate(inventory_dir, tracked)
@@ -169,49 +160,36 @@ def test_validate_reports_only_missing_files(inventory_dir, capsys):
     assert "run.sh" in output, "run.sh not in missing files"
     assert "README.md" not in output, "unexpected README.md file in missing files"
 
-# needs its own fixture to test for missing inventory file
-def test_validate_raises_if_no_inventory(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        validate(tmp_path, set())
 
+def test_validate_fuzzy_matching(tmp_path):
+    _write_inventory(tmp_path, "LICENSE.txt\ndata.uvfits\n")
+    # check alternative spelling support (LICENSE vs LICENCE)
+    assert validate(tmp_path, {"LICENCE.txt", "data.uvfits"}) is True
+    # check suffix stripping support (data.uvfits matches data.uvfits.extra)
+    assert validate(tmp_path, {"LICENSE.txt", "data.uvfits.extra"}) is True
 
 ### build_tree structure tests ###
 
 def test_build_tree_raises_if_root_not_found(tmp_path):
-    with pytest.raises(Exception): 
+    with pytest.raises(FileNotFoundError):
         build_tree(tmp_path / "nonexistent", sample_fmt)
 
-def test_build_tree_returns_dict(sample_tree):
-    assert isinstance(sample_tree, dict), f"expected dict, got {type(inventory_result)}"
+# verify build_tree resolves string inputs for the root path
+def test_build_tree_accepts_string_path(eht_dataset):
+    tree = build_tree(str(eht_dataset), sample_fmt)
+    assert isinstance(tree, dict)
+    assert set(tree.keys()) == {"meta", "drives", "data"}
 
-
-def test_build_tree_has_correct_keys(sample_tree):
+# test that each branch and stem are the write type
+def test_build_tree_structure(sample_tree):
+    assert isinstance(sample_tree, dict), \
+            f"Expected dict for tree, got {type(sample_tree)}"
     assert set(sample_tree.keys()) == {"meta", "drives", "data"}, \
-        f"unepected keys: {sample_tree.keys()}"
-
-
-def test_build_tree_meta_is_paraframe(sample_tree):
-    assert isinstance(sample_tree["meta"], ParaFrame), \
-    f"meta is {type(sample_tree['meta'])} instead of ParaFrame"
-
-
-def test_build_tree_drives_is_paraframe(sample_tree):
-    assert isinstance(sample_tree["drives"], ParaFrame), \
-    f"drives is {type(sample_tree['drives'])} instead of ParaFrame"
-
-
-def test_build_tree_data_is_dict(sample_tree):
+        f"expected meta, drives, and data keys, got {sample_tree.keys()}"
+    assert isinstance(sample_tree["meta"], ParaFrame)
+    assert isinstance(sample_tree["drives"], ParaFrame)
     assert isinstance(sample_tree["data"], dict), \
-    f"data is {type(sample_tree['data'])} instead of dict"
-
-def test_build_tree_path_column_always_present(sample_tree):
-    assert "path" in sample_tree["meta"].columns, \
-    "path column not present in meta branch"
-    assert "path" in sample_tree["drives"].columns, \
-    "path column not present in drives branch"
-    for stem, pf in sample_tree["data"].items(): 
-        assert "path" in pf.columns, \
-    f"path column not present in {stem} data branch"
+        f"data branch is {type(sample_tree['data'])}, not a dict"
 
 # needs unique dataset to test for ext column presence when not in fmt string
 def test_build_tree_ext_column_always_present(tmp_path):
@@ -219,36 +197,46 @@ def test_build_tree_ext_column_always_present(tmp_path):
     (tmp_path / "csv" / "SR1_M87_2017_095_hi.csv").write_text(
         "data", encoding="utf-8")
     _write_inventory(tmp_path, "csv/SR1_M87_2017_095_hi.csv\n")
-    fmt = "csv/SR1_M87_{year}_{day}_{band}.csv"
+    fmt = "SR1_M87_{year}_{day}_{band}.csv"
     tree = build_tree(tmp_path, fmt)
     for stem, pf in tree["data"].items(): 
         assert "ext" in pf.columns, f"ext column not present in {stem}"
 
 ### build_tree meta branch tests ###
 
-def test_build_tree_meta_has_only_meta_files(sample_tree):
-    meta_path = set(sample_tree["meta"]["path"])
-    assert not any(".uvfits" in path for path in meta_path), \
-        "meta branch contains data files"
-    assert not any(".tgz" in path for path in meta_path), \
-        "meta branch contains drive files"
+# needs its own fixture to test hallmark's .hm is ignored
+def test_build_tree_ignores_dot_hm_directory(tmp_path):
+    # create a file inside .hm and verify it's not picked up by meta
+    hm_dir = tmp_path / ".hm"
+    hm_dir.mkdir()
+    (hm_dir / "config.yml").write_text("config", encoding="utf-8")
+    (tmp_path / "visible.txt").write_text("visible", encoding="utf-8")
+    _write_inventory(tmp_path, "visible.txt\n")
+    tree = build_tree(tmp_path, "data/{name}.txt")
+    meta_paths = list(tree["meta"]["path"])
+    assert "visible.txt" in meta_paths, "visible.txt not in meta"
+    assert not any(".hm" in p for p in meta_paths), ".hm directory leaked into meta"
 
-def test_build_tree_meta_has_only_path_column(sample_tree):
-    assert list(sample_tree["meta"].columns) == ["path"], \
-        f"meta has unexpected columns: {list(sample_tree['meta'].columns)}"
 
+# verify that meta and drives branches contain only the file path and are sorted 
+def test_build_tree_simple_branch_schema(sample_tree):
+    for branch in ["meta", "drives"]:
+        columns = sorted(list(sample_tree[branch].columns))
+        assert columns == ["ext", "path"], f"{branch} has unexpected columns: {columns}"
+        branch_list = list(sample_tree[branch]["path"])
+        assert branch_list == sorted(sample_tree[branch]["path"]), \
+            f"{branch} branch is not sorted alphabetically"
+            
 ### build_tree drive branch tests ###
+
 def test_build_tree_drives_only_contains_archive_files(sample_tree):
     # verify every file in drives has a recognized archive extension
     archive_extensions = {".tgz", ".tar", ".gz", ".zip", ".bz2", ".xz", ".zst", ".7z", 
                           ".rar"}
     for path in sample_tree["drives"]["path"]:
         ext = Path(path).suffix
-        assert ext in archive_extensions, f"{path} is not an archive file"
-
-
-def test_build_tree_drives_has_only_path_column(sample_tree):
-    assert list(sample_tree["drives"].columns) == ["path"]
+        assert ext in archive_extensions, \
+            f"file '{path}' is not a recognized archive file (extension: {ext})"
 
 
 # needs its own dataset to test for multiple drive extensions handling
@@ -258,10 +246,12 @@ def test_build_tree_drives_finds_multiple_extensions(tmp_path):
     (tmp_path / "data.zip").write_text("zip", encoding="utf-8")
     _write_inventory(tmp_path, "data.tgz\ndata.zip\n")
     tree = build_tree(tmp_path, "{name}")
-    assert len(tree["drives"]) == 2
+    assert len(tree["drives"]) == 2, \
+        f"length should be 2 but len={len(tree['drives'])}"
     # create list of all unique extensions in drives branch
     extensions = {Path(path).suffix for path in tree["drives"]["path"]}
-    assert extensions == {".tgz", ".zip"}
+    assert extensions == {".tgz", ".zip"}, \
+        f"drives has unexpected extensions: {extensions}, should be ['.tgz', '.zip']"
 
 
 def test_build_tree_drives_empty_when_no_archives(tmp_path):
@@ -278,42 +268,45 @@ def test_build_tree_drives_found_in_subdirectories(tmp_path):
     (subdir / "data.tgz").write_text("tgz", encoding="utf-8")
     _write_inventory(tmp_path, "archives/data.tgz\n")
     tree = build_tree(tmp_path, "{name}")
-    assert any("data.tgz" in path for path in tree["drives"]["path"])
+    assert any("data.tgz" in path for path in tree["drives"]["path"]), \
+        "drives in subdirectory not found"
 
 #### build_tree data branch tests ###
 
-def test_build_tree_data_has_two_stems(sample_tree):
-    assert len(sample_tree["data"]) == 2
-
-
-def test_build_tree_data_stems_are_paraframes(sample_tree):
-    for stem, pf in sample_tree["data"].items():
-        assert isinstance(pf, ParaFrame), f"{stem} is not a ParaFrame"
-
-
-def test_build_tree_each_stem_has_three_files(sample_tree):
-    for stem, pf in sample_tree["data"].items():
-        assert len(pf) == 3, f"{stem} has {len(pf)} files, expected 3"
-
-
-def test_build_tree_no_file_in_multiple_branches(sample_tree):
+# verify that every file is assigned to only one branch and are accounted for
+def test_build_tree_partitioning_and_completeness(sample_tree):
     meta_paths  = set(sample_tree["meta"]["path"])
     drive_paths = set(sample_tree["drives"]["path"])
     data_paths  = {
         path
         for pf in sample_tree["data"].values()
-        for path in pf["path"]
-    }
+        for path in pf["path"]}
     # checks that the three branches have no common files
-    assert meta_paths.isdisjoint(drive_paths)
-    assert meta_paths.isdisjoint(data_paths)
-    assert drive_paths.isdisjoint(data_paths)
+    assert meta_paths.isdisjoint(drive_paths), \
+        f"meta and drives have common files: {sorted(meta_paths & drive_paths)}"
+    assert meta_paths.isdisjoint(data_paths), \
+        f"meta and data have common files: {sorted(meta_paths & data_paths)}"
+    assert drive_paths.isdisjoint(data_paths), \
+        f"drives and data have common files: {sorted(drive_paths & data_paths)}"
+    # the union of all branches must match the inventory exactly
+    all_tracked = meta_paths | drive_paths | data_paths
+    expected = set(EXPECTED_FILES)
+    assert all_tracked == expected, \
+        f"Missing: {expected - all_tracked}. Unexpected: {all_tracked - expected}"
+
+
+def test_build_tree_internal_validation_reports_success(eht_dataset, capsys):
+    build_tree(eht_dataset, sample_fmt)
+    assert "✓ all inventory files are present" in capsys.readouterr().out, \
+    "internal validation did not report success"
 
 
 def test_build_tree_data_empty_when_no_fmt_matches(eht_dataset):
     # use a format that doesn't match any files to verify data branch is empty
     tree = build_tree(eht_dataset, "{ext}/NONEXISTENT_{year}_{day}.{ext}")
-    assert len(tree["data"]) == 0
+    assert len(tree["data"]) == 0, \
+        f"length should be zero but len={len(tree['data'])}"
+
 
 # needs unique dataset to test for single stem handling
 def test_build_tree_single_stem(tmp_path):
@@ -324,17 +317,21 @@ def test_build_tree_single_stem(tmp_path):
         tmp_path,
         "csv/SR1_M87_2017_095_hi_hops_netcal_StokesI.csv\n")
     tree = build_tree(tmp_path, sample_fmt)
-    assert len(tree["data"]) == 1
+    assert len(tree["data"]) == 1, \
+        f"length should be 1 but len={len(tree['data'])}"
 
-def test_build_tree_each_stem_has_correct_columns(sample_tree):
-    for stem, pf in sample_tree["data"].items():
+# test that each data stem contains the expected number of files and schema
+def test_build_tree_data_content(sample_tree):
+    data = sample_tree["data"]
+    assert len(data) == 2, f"expected 2 stems, got {len(data)}"
+    for stem, pf in data.items():
+        assert isinstance(pf, ParaFrame), f"{stem} is not a ParaFrame"
+        assert len(pf) == 3, f"{stem} has {len(pf)} files, expected 3"
         assert set(pf.columns) == {"path", "ext", "year", "day", "band"}, \
-                                  f"{stem} has incorrect columns: {pf.columns}"
-
-def test_build_tree_each_stem_has_all_three_formats(sample_tree):
-    for stem, pf in sample_tree["data"].items():
-        assert set(pf["ext"].unique()) == {"csv", "txt", "uvfits"}, (
-            f"{stem} has wrong formats: {set(pf['ext'].unique())}")
+            f"{stem} has {pf.columns}, expected ['path', 'ext', 'year', 'day', 'band']"
+        formats = set(pf["ext"].unique())
+        assert formats == {"csv", "txt", "uvfits"}, \
+            f"{stem} has wrong formats: {formats}, expected ['csv', 'txt', 'uvfits']"
 
 ### fmt variations tests ###
 
@@ -350,19 +347,7 @@ def test_build_tree_nested_subdir_fmt(tmp_path):
         tmp_path,
         "casa_data/April05/SR2_M87_2017_095_hi_casa.uvfits\n"
         "hops_data/April05/SR2_M87_2017_095_hi_hops.uvfits\n")
-    fmt = "{pipeline}_data/{date}/SR2_M87_{year}_{day}_{band}_{pipeline}.uvfits"
+    fmt = "SR2_M87_{year}_{day}_{band}_{pipeline}.uvfits"
     tree = build_tree(tmp_path, fmt)
-    assert len(tree["data"]) == 2
-
-
-# validation test
-def test_build_tree_validate_passes(sample_tree, eht_dataset):
-    tracked = set()
-    for _, row in sample_tree["meta"].iterrows():
-        tracked.add(row["path"])
-    for _, row in sample_tree["drives"].iterrows():
-        tracked.add(row["path"])
-    for pf in sample_tree["data"].values():
-        for _, row in pf.iterrows():
-            tracked.add(row["path"])
-    assert validate(eht_dataset, tracked) is True
+    assert len(tree["data"]) == 2, \
+    f"length should be 2 but len={len(tree['data'])}, couldn't parse nested directories"
