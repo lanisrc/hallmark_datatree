@@ -209,7 +209,7 @@ def test_build_tree_path_column_always_present(sample_tree):
     "path column not present in meta branch"
     assert "path" in sample_tree["drives"].columns, \
     "path column not present in drives branch"
-    for stem, pf in sample_tree["data"].values(): 
+    for stem, pf in sample_tree["data"].items(): 
         assert "path" in pf.columns, \
     f"path column not present in {stem} data branch"
 
@@ -221,7 +221,7 @@ def test_build_tree_ext_column_always_present(tmp_path):
     _write_inventory(tmp_path, "csv/SR1_M87_2017_095_hi.csv\n")
     fmt = "csv/SR1_M87_{year}_{day}_{band}.csv"
     tree = build_tree(tmp_path, fmt)
-    for stem, pf in tree["data"].values(): 
+    for stem, pf in tree["data"].items(): 
         assert "ext" in pf.columns, f"ext column not present in {stem}"
 
 ### build_tree meta branch tests ###
