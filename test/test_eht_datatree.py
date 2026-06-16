@@ -139,7 +139,7 @@ def test_read_inventory_skips_blank_lines(tmp_path):
     _write_inventory(tmp_path, "\nREADME.md\n\nLICENSE.txt\n")
     result = read_inventory(tmp_path)
     assert result == ["README.md", "LICENSE.txt"], \
-        f"Expected only README.md and LICENSE.txt, got {{result}}"
+        f"Expected only README.md and LICENSE.txt, got {result}"
 
 # needs its own fixture to test for missing inventory file
 def test_read_inventory_raises_if_missing(tmp_path):
